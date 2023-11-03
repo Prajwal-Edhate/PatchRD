@@ -1,0 +1,16 @@
+Namespace(K=2, batch_size=1, c_range=26, checkpoint_dir='checkpoint_patch/chair_C50_P600_400', compute_cd=False, continue_train=False, csize=26, data_content='content_chair', data_dir='./data/03001627/', decay_step=1, dump_deform=False, dump_deform_path='./dump_deform/chair_C50_P400_D600/model0', epoch=251, g_dim=32, gpu='0', gw_dim=32, input_size=32, loc_size=32, log_dir='logs/patch/C50_P600_400/', lr=0.0001, lr_decay=0.99, max_sample_num=600, max_wd_num=32, mode='train', model_name='chair_model0', output_size=128, patch_size=18, sample_dir='samples_patch/chair_C50_P600_400', sample_step=32, small_dataset=False, train_complete=False, train_deform=False, train_joint=False, train_patch=True, trans_limit=0.0001, w_dis=1, w_ident=8.0, w_mask=1, w_posi=1, w_r=1, w_s=0, wd_size=8, z_dim=128)
+Epoch: [0/251] time: 1191, loss_rand: 2.67724, loss_itent:  0.12559
+Epoch: [1/251] time: 2207, loss_rand: 2.02549, loss_itent:  0.05523
+Epoch: [2/251] time: 3222, loss_rand: 3.66963, loss_itent:  0.20573
+Epoch: [3/251] time: 4261, loss_rand: 4.28793, loss_itent:  0.07207
+Epoch: [4/251] time: 5287, loss_rand: 3.30204, loss_itent:  0.08875
+Epoch: [5/251] time: 6310, loss_rand: 3.85016, loss_itent:  0.09820
+Epoch: [6/251] time: 7346, loss_rand: 2.86265, loss_itent:  0.12858
+Epoch: [7/251] time: 8370, loss_rand: 1.65202, loss_itent:  0.17597
+Epoch: [8/251] time: 9404, loss_rand: 2.00144, loss_itent:  0.15761
+Epoch: [9/251] time: 10424, loss_rand: 2.30513, loss_itent:  0.07092
+Epoch: [10/251] time: 11452, loss_rand: 1.79595, loss_itent:  0.08528
+Epoch: [11/251] time: 12488, loss_rand: 1.58172, loss_itent:  0.05021
+Epoch: [12/251] time: 13519, loss_rand: 1.27764, loss_itent:  0.11901
+Epoch: [13/251] time: 14545, loss_rand: 1.11120, loss_itent:  0.04710
+Epoch: [14/251] time: 15566, loss_rand: 2.54302, loss_itent:  0.12232
