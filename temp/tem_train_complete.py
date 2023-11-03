@@ -4,6 +4,7 @@ import math
 import random
 from typing import get_type_hints
 import numpy as np
+import cupy as cp
 import cv2
 import h5py
 import open3d as o3d
@@ -86,12 +87,17 @@ class MODEL_COMPLETE(object):
         x_ = range(self.output_size)
         y_ = range(self.output_size)
         z_ = range(self.output_size)
-        yy, xx, zz = np.meshgrid(x_,y_,z_)
-        self.shape_coord = np.concatenate((np.expand_dims(xx, -1), np.expand_dims(yy, -1),np.expand_dims(zz, -1)), -1)
+
+        x_ = cp.asarray(x_)
+        y_ = cp.asarray(y_)
+        z_ = cp.asarray(z_)
+
+        yy, xx, zz = cp.meshgrid(x_,y_,z_)
+        self.shape_coord = cp.concatenate((cp.expand_dims(xx, -1), cp.expand_dims(yy, -1),cp.expand_dims(zz, -1)), -1)
 
         print("preprocessing - start")
 
-        self.imgout_0 = np.full([self.real_size*4, self.real_size*4*3], 255, np.uint8)
+        self.imgout_0 = cp.full([self.real_size*4, self.real_size*4*3], 255, cp.uint8)
 
         if os.path.exists("splits/"+self.data_content+"_train.txt"):
             # load data
@@ -101,9 +107,8 @@ class MODEL_COMPLETE(object):
             self.dataset_names = [name.strip() for name in fin.readlines()]
             fin.close()
 
-            
-            self.dataset_len = 10
-            self.dataset_names = self.dataset_names[:self.dataset_len]
+            self.dataset_len = len(self.dataset_names)
+            self.dataset_len = 4
 
             self.mask_content  = []
             self.input_content = []
@@ -123,7 +128,7 @@ class MODEL_COMPLETE(object):
                         self.dataset_len = self.dataset_len -1
                         continue
 
-                    tmp_raw = get_vox_from_binvox_1over2(os.path.join(self.data_dir,self.dataset_names[self.names[i]]+vox_name)).astype(np.uint8)
+                    tmp_raw = get_vox_from_binvox_1over2(os.path.join(self.data_dir,self.dataset_names[self.names[i]]+vox_name)).astype(cp.uint8)
                     xmin,xmax,ymin,ymax,zmin,zmax = self.get_voxel_bbox(tmp_raw)
 
                     tmp = self.crop_voxel(tmp_raw,xmin,xmax,ymin,ymax,zmin,zmax)
@@ -131,14 +136,14 @@ class MODEL_COMPLETE(object):
                     tmp_input, tmp_mask = self.get_voxel_input_Dmask_mask(tmp)
 
                     partial_shape, partial_mask = self.random_crop(tmp, crop_size=self.csize,c_range=self.c_range)
-                    partial_shape =  gaussian_filter(partial_shape.astype(np.float32), sigma=1)
+                    partial_shape =  cp.asarray(gaussian_filter(cp.asnumpy(partial_shape).astype(np.float32), sigma=1))
                      
 
-                    self.input_content.append(tmp_input)
-                    self.gt_content.append(gt_voxel)
-                    self.mask_content.append(tmp_mask)
-                    self.partial_content.append(partial_shape)
-                    self.partial_mask.append(partial_mask)
+                    self.input_content.append(tmp_input.get())
+                    self.gt_content.append(gt_voxel.get())
+                    self.mask_content.append(tmp_mask.get())
+                    self.partial_content.append(partial_shape.get())
+                    self.partial_mask.append(partial_mask.get())
                     self.pos_content.append([xmin,xmax,ymin,ymax,zmin,zmax])
 
                     img_y = i//4
@@ -160,7 +165,7 @@ class MODEL_COMPLETE(object):
                         tmpvox = self.recover_voxel(partial_shape,xmin,xmax,ymin,ymax,zmin,zmax)
                         self.imgout_0[img_y*self.real_size:(img_y+1)*self.real_size,img_x*self.real_size:(img_x+1)*self.real_size] = self.voxel_renderer.render_img(tmpvox, self.sampling_threshold, self.render_view_id)
 
-                    cv2.imwrite(self.sample_dir+"/a_content_train.png", self.imgout_0)
+                    cv2.imwrite(self.sample_dir+"/a_content_train.png", cp.asnumpy(self.imgout_0))
         else:
             print("ERROR: cannot load dataset txt: "+"splits/"+self.data_content+"_train.txt")
             exit(-1)
@@ -173,7 +178,7 @@ class MODEL_COMPLETE(object):
             fin.close()
 
             self.test_dataset_len = len(self.test_dataset_names)
-            self.test_dataset_len = 30
+            self.test_dataset_len = 2
 
             self.mask_test  = []
             self.input_test = []
@@ -190,7 +195,7 @@ class MODEL_COMPLETE(object):
                         print('non exits')
                         self.test_dataset_len = self.test_dataset_len - 1
                         continue
-                    tmp_raw = get_vox_from_binvox_1over2(os.path.join(self.data_dir,self.test_dataset_names[self.names[i]]+vox_name)).astype(np.uint8)
+                    tmp_raw = get_vox_from_binvox_1over2(os.path.join(self.data_dir,self.test_dataset_names[self.names[i]]+vox_name)).astype(cp.uint8)
                     xmin,xmax,ymin,ymax,zmin,zmax = self.get_voxel_bbox(tmp_raw)
                     crop_locs = None 
                     
@@ -201,13 +206,13 @@ class MODEL_COMPLETE(object):
 
                     partial_shape, partial_mask = self.random_crop(tmp, crop_size=self.csize,\
                                     c_range=self.c_range, c_locs=crop_locs)
-                    partial_shape =  gaussian_filter(partial_shape.astype(np.float32), sigma=1)
+                    partial_shape =  cp.asarray(gaussian_filter(cp.asnumpy(partial_shape).astype(np.float32), sigma=1))
 
                     # self.im_content.append(im)
-                    self.partial_test.append(partial_shape)
-                    self.input_test.append(tmp_input)
-                    self.gt_test.append(gt_voxel)
-                    self.mask_test.append(tmp_mask)
+                    self.partial_test.append(partial_shape.get())
+                    self.input_test.append(tmp_input.get())
+                    self.gt_test.append(gt_voxel.get())
+                    self.mask_test.append(tmp_mask.get())
                     self.pos_test.append([xmin,xmax,ymin,ymax,zmin,zmax] )
                     # xmin,xmax,ymin,ymax,zmin,zmax = 64+8, 192-8, 64+8, 192-8, 64+8, 192-8
 
@@ -230,10 +235,11 @@ class MODEL_COMPLETE(object):
                         tmpvox = self.recover_voxel(partial_shape,xmin,xmax,ymin,ymax,zmin,zmax)
                         self.imgout_0[img_y*self.real_size:(img_y+1)*self.real_size,img_x*self.real_size:(img_x+1)*self.real_size] = self.voxel_renderer.render_img(tmpvox, self.sampling_threshold, self.render_view_id)
 
-                    cv2.imwrite(self.sample_dir+"/a_content_test.png", self.imgout_0)
+                    cv2.imwrite(self.sample_dir+"/a_content_test.png", cp.asnumpy(self.imgout_0))
 
         self.generator = CoarseCompletor_skip(self.g_dim,)
         self.generator.to(self.device)
+        #print(list(self.generator.parameters()))
         self.optimizer = torch.optim.Adam(self.generator.parameters(), lr=config.lr)
         self.scheduler = torch.optim.lr_scheduler.StepLR(self.optimizer, 30, gamma=0.99)
 
@@ -252,7 +258,7 @@ class MODEL_COMPLETE(object):
 
     def get_voxel_input_Dmask_mask(self,vox):
 
-        vox_tensor = torch.from_numpy(vox).to(self.device).unsqueeze(0).unsqueeze(0).float()
+        vox_tensor = torch.from_numpy(cp.asnumpy(vox)).to(self.device).unsqueeze(0).unsqueeze(0).float()
         #input
         down_rate = self.output_size//self.input_size
 
@@ -265,37 +271,38 @@ class MODEL_COMPLETE(object):
         smallmask_tensor = F.max_pool3d(vox_tensor, kernel_size = 5, stride = 1, padding = 2)
 
         #to numpy
-        input_in = input_vox.detach().cpu().numpy()[0,0]
-        input_in = np.round(input_in).astype(np.uint8)
+        input_in = cp.asarray(input_vox.detach())[0,0]
+        input_in = cp.round(input_in).astype(cp.uint8)
 
         mask_in = smallmask_tensor.detach().cpu().numpy()[0,0]
-        mask_in = np.round(mask_in).astype(np.uint8)
+        mask_in = cp.round(mask_in).astype(cp.uint8)
         return input_in, mask_in
 
     
     def random_crop(self, vox, crop_size=20, c_range=20, prob=None, c_locs=None):
+        vox = cp.asarray(vox)
         vx, vy, vz = vox.shape
-        edges = sobel(vox)
-        edges = edges.astype(np.float32)/255.0
+        edges = sobel(cp.asarray(vox).get())
+        edges = cp.asarray(edges).astype(cp.float32)/255.0
 
-        csize = crop_size + (np.random.rand(3)-0.5)*c_range
-        csize = csize.astype(np.int32)
+        csize = crop_size + (cp.random.rand(3)-0.5)*c_range
+        csize = csize.astype(cp.int32)
         csize[0] = min(vx-16, csize[0])
         csize[1] = min(vy-16, csize[1])
         csize[2] = min(vz-16, csize[2])
 
-        loc_starts = np.zeros(3,np.int32)
-        new_vox = np.zeros(vox.shape)
+        loc_starts = cp.zeros(3,cp.int32)
+        new_vox = cp.zeros(vox.shape)
         new_vox[:,:,:] = vox[:,:,:].copy()
-        loc_starts[0] = np.random.randint(0, vx-csize[0])
-        loc_starts[1] = np.random.randint(0, vy-csize[1])
-        loc_starts[2] = np.random.randint(0, vz-csize[2])
+        loc_starts[0] = cp.random.randint(0, vx-csize[0])
+        loc_starts[1] = cp.random.randint(0, vy-csize[1])
+        loc_starts[2] = cp.random.randint(0, vz-csize[2])
 
-        if np.array(edges>0.4,np.int32).sum()<100:
+        if cp.array(edges>0.4,cp.int32).sum()<100:
             p = 0
         else:
             if prob is None:
-                p = np.random.random()
+                p = cp.random.random()
             else:
                 p = prob
 
@@ -303,15 +310,15 @@ class MODEL_COMPLETE(object):
 
             while(vox[loc_starts[0]:loc_starts[0]+csize[0], loc_starts[1]:loc_starts[1]+csize[1],\
                 loc_starts[2]:loc_starts[2]+csize[2],].sum()<30):
-                csize = crop_size + (np.random.rand(3)-0.5)*c_range
+                csize = crop_size + (cp.random.rand(3)-0.5)*c_range
                 csize[0] = min(vx-16, csize[0])
                 csize[1] = min(vy-16, csize[1])
                 csize[2] = min(vz-16, csize[2])
-                csize = csize.astype(np.int32)
+                csize = csize.astype(cp.int32)
 
-                loc_starts[0] = np.random.randint(0, vx-csize[0])
-                loc_starts[1] = np.random.randint(0, vy-csize[1])
-                loc_starts[2] = np.random.randint(0, vz-csize[2])
+                loc_starts[0] = cp.random.randint(0, vx-csize[0])
+                loc_starts[1] = cp.random.randint(0, vy-csize[1])
+                loc_starts[2] = cp.random.randint(0, vz-csize[2])
 
         elif c_locs is None:
             if self.data_content=='content_chair':
@@ -319,15 +326,15 @@ class MODEL_COMPLETE(object):
                 while(vox[loc_starts[0]:loc_starts[0]+csize[0], loc_starts[1]:loc_starts[1]+csize[1],\
                     loc_starts[2]:loc_starts[2]+csize[2],].sum()<30 or loc_starts[1]<vy/2):
 
-                    csize = crop_size + (np.random.rand(3)-0.5)*c_range
+                    csize = crop_size + (cp.random.rand(3)-0.5)*c_range
                     csize[0] = min(vx-16, csize[0])
                     csize[1] = min(vy-16, csize[1])
                     csize[2] = min(vz-16, csize[2])
-                    csize = csize.astype(np.int32)
+                    csize = csize.astype(cp.int32)
 
-                    loc_starts[0] = np.random.randint(0, vx-csize[0])
-                    loc_starts[1] = np.random.randint(0, vy-csize[1])
-                    loc_starts[2] = np.random.randint(0, vz-csize[2])
+                    loc_starts[0] = cp.random.randint(0, vx-csize[0])
+                    loc_starts[1] = cp.random.randint(0, vy-csize[1])
+                    loc_starts[2] = cp.random.randint(0, vz-csize[2])
 
                     cnt+=1
                     if cnt>10:
@@ -340,7 +347,7 @@ class MODEL_COMPLETE(object):
         new_vox[loc_starts[0]:loc_starts[0]+csize[0], loc_starts[1]:loc_starts[1]+csize[1],\
             loc_starts[2]:loc_starts[2]+csize[2],] = 0
 
-        mask_in = np.zeros(vox.shape)
+        mask_in = cp.zeros(vox.shape)
         mask_in[loc_starts[0]:loc_starts[0]+csize[0], loc_starts[1]:loc_starts[1]+csize[1],\
             loc_starts[2]:loc_starts[2]+csize[2],] = 1.0
         return new_vox, mask_in
@@ -350,36 +357,36 @@ class MODEL_COMPLETE(object):
             output is vsize*vsize*vsize
             assumes points are in range [-radius, radius]
         """
-        vol = np.zeros((vsize,vsize,vsize))
+        vol = cp.zeros((vsize,vsize,vsize))
         voxel = 2*radius/float(vsize)
         locations = (points + radius)/voxel
-        locations = np.clip(locations, 0, vsize-1e-4)
-        locations = locations.astype(int)
+        locations = cp.clip(locations, 0, vsize-1e-4)
+        locations = locations.astype(cp.int)
         vol[locations[:,0],locations[:,1],locations[:,2]] = 1.0
         return vol
 
     def rotate_pc_along_y(self,pc, rot_angle):
-        cosval = np.cos(rot_angle)
-        sinval = np.sin(rot_angle)
-        rotmat = np.array([[cosval, -sinval],[sinval, cosval]])
-        pc[:,[0,2]] = np.dot(pc[:,[0,2]], np.transpose(rotmat))
+        cosval = cp.cos(rot_angle)
+        sinval = cp.sin(rot_angle)
+        rotmat = cp.array([[cosval, -sinval],[sinval, cosval]])
+        pc[:,[0,2]] = cp.dot(pc[:,[0,2]], cp.transpose(rotmat))
         return pc
 
 
     def get_voxel_bbox(self,vox):
         #minimap
-        vox_tensor = torch.from_numpy(vox).to(self.device).unsqueeze(0).unsqueeze(0).float()
+        vox_tensor = torch.from_numpy(cp.asnumpy(vox)).to(self.device).unsqueeze(0).unsqueeze(0).float()
         #smallmaskx_tensor = F.max_pool3d(vox_tensor, kernel_size = 2, stride = 2, padding = 0)
         #smallmaskx_tensor = F.interpolate(smallmaskx_tensor, scale_factor = 2, mode='nearest')
 
         smallmaskx_tensor = F.max_pool3d(vox_tensor, kernel_size=self.upsample_rate, stride = self.upsample_rate, padding = 0)
         smallmaskx_tensor = F.interpolate(smallmaskx_tensor, scale_factor=self.upsample_rate, mode='nearest')
 
-        smallmaskx = smallmaskx_tensor.detach().cpu().numpy()[0,0]
-        smallmaskx = np.round(smallmaskx).astype(np.uint8)
+        smallmaskx = cp.asarray(smallmaskx_tensor.detach())[0,0]
+        smallmaskx = cp.round(smallmaskx).astype(cp.uint8)
         smallx,smally,smallz = smallmaskx.shape
         #x
-        ray = np.max(smallmaskx,(1,2))
+        ray = cp.max(smallmaskx,(1,2))
         xmin = 0
         xmax = 0
         for i in range(smallx):
@@ -388,7 +395,7 @@ class MODEL_COMPLETE(object):
                     xmin = i
                 xmax = i
         #y
-        ray = np.max(smallmaskx,(0,2))
+        ray = cp.max(smallmaskx,(0,2))
         ymin = 0
         ymax = 0
         for i in range(smally):
@@ -397,7 +404,7 @@ class MODEL_COMPLETE(object):
                     ymin = i
                 ymax = i
         #z
-        ray = np.max(smallmaskx,(0,1))
+        ray = cp.max(smallmaskx,(0,1))
         if self.asymmetry:
             zmin = 0
             zmax = 0
@@ -417,21 +424,21 @@ class MODEL_COMPLETE(object):
 
     def get_voxel_mask_exact(self,vox):
         #256 -maxpoolk4s4- 64 -upsample- 256
-        vox_tensor = torch.from_numpy(vox).to(self.device).unsqueeze(0).unsqueeze(0).float()
+        vox_tensor = torch.from_numpy(cp.asnumpy(vox)).to(self.device).unsqueeze(0).unsqueeze(0).float()
         #input
         smallmaskx_tensor = F.max_pool3d(vox_tensor, kernel_size = self.upsample_rate, stride = self.upsample_rate, padding = 0)
         #mask
         smallmask_tensor = F.interpolate(smallmaskx_tensor, scale_factor = self.upsample_rate, mode='nearest')
         #to numpy
-        smallmask = smallmask_tensor.detach().cpu().numpy()[0,0]
-        smallmask = np.round(smallmask).astype(np.uint8)
+        smallmask = cp.asarray(smallmask_tensor.detach())[0,0]
+        smallmask = cp.round(smallmask).astype(cp.uint8)
         return smallmask
 
     def crop_voxel(self,vox,xmin,xmax,ymin,ymax,zmin,zmax):
         xspan = xmax-xmin
         yspan = ymax-ymin
         zspan = zmax-zmin
-        tmp = np.zeros([xspan*self.upsample_rate+self.mask_margin*2,yspan*self.upsample_rate+self.mask_margin*2,zspan*self.upsample_rate+self.mask_margin*2], np.uint8)
+        tmp = cp.zeros([xspan*self.upsample_rate+self.mask_margin*2,yspan*self.upsample_rate+self.mask_margin*2,zspan*self.upsample_rate+self.mask_margin*2], cp.uint8)
         if self.asymmetry:
             tmp[self.mask_margin:-self.mask_margin,self.mask_margin:-self.mask_margin,self.mask_margin:-self.mask_margin] = vox[xmin*self.upsample_rate:xmax*self.upsample_rate,ymin*self.upsample_rate:ymax*self.upsample_rate,zmin*self.upsample_rate:zmax*self.upsample_rate]
         else:
@@ -440,7 +447,9 @@ class MODEL_COMPLETE(object):
         return tmp
 
     def recover_voxel(self,vox,xmin,xmax,ymin,ymax,zmin,zmax):
-        tmpvox = np.zeros([self.real_size,self.real_size,self.real_size], np.float32)
+        vox = cp.asarray(vox)
+        #print(type(vox))
+        tmpvox = cp.zeros([self.real_size,self.real_size,self.real_size], cp.float32)
         xmin_,ymin_,zmin_ = (0,0,0)
         xmax_,ymax_,zmax_ = vox.shape
         xmin = xmin*self.upsample_rate-self.mask_margin
@@ -486,7 +495,7 @@ class MODEL_COMPLETE(object):
         x,y,z = v2_shape
 
         new_v1 = v1
-        padding = np.zeros(6)
+        padding = cp.zeros(6)
         if z1 < z:
             padding[0], padding[1] = int((z-z1)/2), z-z1-int((z-z1)/2)
         else:
@@ -500,7 +509,7 @@ class MODEL_COMPLETE(object):
             padding[4], padding[5] = int((x-x1)/2), x-x1-int((x-x1)/2)
         else:
             new_v1 = new_v1[:,:,int((x1-x)/2):int((x1-x)/2)+x,:,: ]
-        new_v1 = F.pad(new_v1, tuple(padding.astype(np.int8)))
+        new_v1 = F.pad(new_v1, tuple(cp.asnumpy(padding).astype(np.int8)))
         return new_v1
 
     def load(self):
@@ -570,15 +579,15 @@ class MODEL_COMPLETE(object):
             _ = self.eval_one_epoch(self.start_epoch-1, config)
             return
         best_iou = 0.0
-        self.imgout_0 = np.full([self.real_size*4, self.real_size*4*4], 255, np.uint8)
+        self.imgout_0 = cp.full([self.real_size*4, self.real_size*4*4], 255, cp.uint8)
 
         start_time = time.time()
         training_epoch = config.epoch
 
-        batch_index_list = np.arange(self.dataset_len)
+        batch_index_list = cp.arange(self.dataset_len)
 
         for epoch in range(self.start_epoch,  training_epoch):
-            np.random.shuffle(batch_index_list)
+            cp.random.shuffle(batch_index_list)
 
             total_loss = 0.0
             total_iou = 0.0
@@ -587,16 +596,17 @@ class MODEL_COMPLETE(object):
             for idx in range(self.dataset_len):
                 # ready a fake image
                 dxb = batch_index_list[idx]
+                dxb = cp.asnumpy(dxb)
                 mask_in =  torch.from_numpy(self.mask_content[dxb]).to(self.device).unsqueeze(0).unsqueeze(0).float()
                 input_in = torch.from_numpy(self.input_content[dxb]).to(self.device).unsqueeze(0).unsqueeze(0).float()
                 gt_train = torch.from_numpy(gaussian_filter(self.gt_content[dxb].astype(np.float32),sigma=1)\
                         ).to(self.device).unsqueeze(0).unsqueeze(0).float()
 
                 partial_shape, partial_mask = self.random_crop(self.gt_content[dxb],crop_size=self.csize,c_range=self.c_range)
-                partial_shape =  gaussian_filter(partial_shape.astype(np.float32), sigma=1)
+                partial_shape =  cp.asarray(gaussian_filter(cp.asnumpy(partial_shape).astype(np.float32), sigma=1))
 
-                partial_in = torch.from_numpy(partial_shape).to(self.device).unsqueeze(0).unsqueeze(0).float()
-                mask_partial_in = torch.from_numpy(partial_mask).to(self.device).unsqueeze(0).unsqueeze(0).float()
+                partial_in = torch.from_numpy(cp.asnumpy(partial_shape)).to(self.device).unsqueeze(0).unsqueeze(0).float()
+                mask_partial_in = torch.from_numpy(cp.asnumpy(partial_mask)).to(self.device).unsqueeze(0).unsqueeze(0).float()
                 partial_in = self.reshape_to_size_torch(partial_in, (self.output_size,self.output_size,self.output_size))
                 mask_partial_in = self.reshape_to_size_torch(mask_partial_in, (self.output_size,self.output_size,self.output_size))
                 gt_train = self.reshape_to_size_torch(gt_train, (self.output_size,self.output_size,self.output_size))
@@ -621,7 +631,7 @@ class MODEL_COMPLETE(object):
                 
                 total_loss = total_loss + loss_r.item()
                 total_iou = total_iou + iou_train.item()
-
+                #print("generator",loss_r.shape)
                 loss_r.backward()
                 self.optimizer.step()
 
@@ -631,7 +641,7 @@ class MODEL_COMPLETE(object):
                     img_x = (dxb%4)*4
                     if img_y<4:
                         input_in = self.reshape_to_size_torch(input_in, self.gt_content[dxb].shape)
-                        tmp_voxel_fake = input_in.detach().cpu().numpy()[0,0]
+                        tmp_voxel_fake = cp.asarray(input_in.detach())[0,0]
                         xmin,xmax,ymin,ymax,zmin,zmax = self.pos_content[dxb]
 
                         tmpvox = self.recover_voxel(tmp_voxel_fake,xmin,xmax,ymin,ymax,zmin,zmax)
@@ -650,7 +660,7 @@ class MODEL_COMPLETE(object):
                     if img_y<4:
                         xmin,xmax,ymin,ymax,zmin,zmax = self.pos_content[dxb]
                         voxel_out = self.reshape_to_size_torch(voxel_out, self.gt_content[dxb].shape)
-                        tmp_voxel_fake = voxel_out.detach().cpu().numpy()[0,0]
+                        tmp_voxel_fake = cp.asarray(voxel_out.detach())[0,0]
                         tmpvox = self.recover_voxel(tmp_voxel_fake,xmin,xmax,ymin,ymax,zmin,zmax)
                         self.imgout_0[img_y*self.real_size:(img_y+1)*self.real_size,img_x*self.real_size:(img_x+1)*self.real_size] = self.voxel_renderer.render_img(tmpvox, self.sampling_threshold, self.render_view_id)
 
@@ -668,7 +678,7 @@ class MODEL_COMPLETE(object):
             #self.logger.add_scalars('total train', {'total_loss_l2': total_loss/self.dataset_len, 'total_iou': total_iou/self.dataset_len},total_steps)
 
             if epoch%20==0:
-                cv2.imwrite(self.sample_dir+"/train_"+str(epoch)+"_0.png", self.imgout_0)
+                cv2.imwrite(self.sample_dir+"/train_"+str(epoch)+"_0.png", cp.asnumpy(self.imgout_0))
 
             if epoch%self.eval_epoch==0:
                 eval_iou = self.eval_one_epoch(epoch,config)
@@ -686,7 +696,7 @@ class MODEL_COMPLETE(object):
         total_iou = 0.0
         total_num=0
 
-        self.imgout_0 = np.full([self.real_size*4, self.real_size*4*4], 255, np.uint8)
+        self.imgout_0 = cp.full([self.real_size*4, self.real_size*4*4], 255, cp.uint8)
         
         if self.test_dataset_len==0:
             return 0
@@ -703,10 +713,10 @@ class MODEL_COMPLETE(object):
             gt_test = torch.from_numpy(gaussian_filter(self.gt_test[dxb].astype(np.float32),sigma=1)).to(self.device).unsqueeze(0).unsqueeze(0).float()
 
             partial_shape, partial_mask = self.random_crop(self.gt_test[dxb], crop_size=self.csize,c_range=self.c_range,prob=1)
-            partial_shape =  gaussian_filter(partial_shape.astype(np.float32), sigma=1)
+            partial_shape =  cp.asarray(gaussian_filter(cp.asnumpy(partial_shape).astype(np.float32), sigma=1))
 
-            partial_in = torch.from_numpy(partial_shape).to(self.device).unsqueeze(0).unsqueeze(0).float()
-            mask_partial_in = torch.from_numpy(partial_mask).to(self.device).unsqueeze(0).unsqueeze(0).float()
+            partial_in = torch.from_numpy(cp.asnumpy(partial_shape)).to(self.device).unsqueeze(0).unsqueeze(0).float()
+            mask_partial_in = torch.from_numpy(cp.asnumpy(partial_mask)).to(self.device).unsqueeze(0).unsqueeze(0).float()
 
             partial_in = self.reshape_to_size_torch(partial_in, (self.output_size,self.output_size,self.output_size))
             gt_test = self.reshape_to_size_torch(gt_test, (self.output_size,self.output_size,self.output_size))
@@ -727,7 +737,7 @@ class MODEL_COMPLETE(object):
             img_x = (dxb%4)*4
             if img_y<4:
                 input_in = self.reshape_to_size_torch(input_in, self.gt_test[dxb].shape)
-                tmp_voxel_fake = input_in.detach().cpu().numpy()[0,0]
+                tmp_voxel_fake = cp.asarray(input_in.detach())[0,0]
                 xmin,xmax,ymin,ymax,zmin,zmax = self.pos_test[dxb]
 
                 tmpvox = self.recover_voxel(tmp_voxel_fake,xmin,xmax,ymin,ymax,zmin,zmax)
@@ -738,7 +748,7 @@ class MODEL_COMPLETE(object):
             if img_y<4:
                 xmin,xmax,ymin,ymax,zmin,zmax = self.pos_test[dxb]
                 tmp_voxel_fake = self.reshape_to_size_torch(partial_in, self.gt_test[dxb].shape)
-                tmp_voxel_fake = tmp_voxel_fake.detach().cpu().numpy()[0,0]
+                tmp_voxel_fake = cp.asarray(tmp_voxel_fake.detach())[0,0]
 
                 tmpvox = self.recover_voxel(tmp_voxel_fake,xmin,xmax,ymin,ymax,zmin,zmax)
                 self.imgout_0[img_y*self.real_size:(img_y+1)*self.real_size,img_x*self.real_size:(img_x+1)*self.real_size] = self.voxel_renderer.render_img(tmpvox, self.sampling_threshold, self.render_view_id)
@@ -747,7 +757,7 @@ class MODEL_COMPLETE(object):
             img_x = (dxb%4)*4+2
             if img_y<4:
                 voxel_out = self.reshape_to_size_torch(voxel_out, self.gt_test[dxb].shape)
-                tmp_voxel_fake = voxel_out.detach().cpu().numpy()[0,0]
+                tmp_voxel_fake = cp.asarray(voxel_out.detach())[0,0]
 
                 tmpvox = self.recover_voxel(tmp_voxel_fake,xmin,xmax,ymin,ymax,zmin,zmax)
                 self.imgout_0[img_y*self.real_size:(img_y+1)*self.real_size,img_x*self.real_size:(img_x+1)*self.real_size] = self.voxel_renderer.render_img(tmpvox, self.sampling_threshold, self.render_view_id)
@@ -756,11 +766,11 @@ class MODEL_COMPLETE(object):
             img_x = (dxb%4)*4+3
             if img_y<4:
                 #tmp_voxel_fake = gt_test.detach().cpu().numpy()[0,0]
-                tmp_voxel_fake = self.gt_test[dxb]
+                tmp_voxel_fake = cp.asarray(self.gt_test[dxb])
                 tmpvox = self.recover_voxel(tmp_voxel_fake,xmin,xmax,ymin,ymax,zmin,zmax)
                 self.imgout_0[img_y*self.real_size:(img_y+1)*self.real_size,img_x*self.real_size:(img_x+1)*self.real_size] = self.voxel_renderer.render_img(tmpvox, self.sampling_threshold, self.render_view_id)
         
-        cv2.imwrite(self.sample_dir+"/eval_"+str(epoch)+".png", self.imgout_0)
+        cv2.imwrite(self.sample_dir+"/eval_"+str(epoch)+".png", cp.asnumpy(self.imgout_0))
 
         self.log_string("[eval] Epoch: [%d/%d] time: %.0f, eval_loss_r: %.6f, eval_iou: %.4f," % (epoch, config.epoch, time.time() - start_time,  total_loss/self.test_dataset_len, total_iou/self.test_dataset_len))
 
