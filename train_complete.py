@@ -102,7 +102,7 @@ class MODEL_COMPLETE(object):
             fin.close()
 
             
-            self.dataset_len = 10
+            self.dataset_len = 50
             self.dataset_names = self.dataset_names[:self.dataset_len]
 
             self.mask_content  = []
@@ -172,8 +172,8 @@ class MODEL_COMPLETE(object):
             self.test_dataset_names = [name.strip() for name in fin.readlines()]
             fin.close()
 
-            self.test_dataset_len = len(self.test_dataset_names)
             self.test_dataset_len = 30
+            self.test_dataset_names = self.test_dataset_names[200:200 + self.test_dataset_len]
 
             self.mask_test  = []
             self.input_test = []
@@ -238,6 +238,7 @@ class MODEL_COMPLETE(object):
         self.scheduler = torch.optim.lr_scheduler.StepLR(self.optimizer, 30, gamma=0.99)
 
         self.max_to_keep = 2
+        #self.checkpoint_path = os.path.join(self.checkpoint_dir, "content_chair_complete/", config.model_name)
         self.checkpoint_path = os.path.join(self.checkpoint_dir, self.model_dir, config.model_name)
         self.checkpoint_name='checkpoint'
 
